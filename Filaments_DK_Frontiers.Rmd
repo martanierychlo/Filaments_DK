@@ -1,0 +1,929 @@
+---
+title: "Candidatus Amarolinea and Candidatus Microthrix Are Mainly Responsible for Filamentous Bulking in Municipal Danish Wastewater Treatment Plants"
+author: "Marta Nierychlo"
+date: "17 april 2020"
+output: html_document
+---
+##Project scope
+This material contains analysis of microbial community in 17 full-scale Danish wastewater treatment plants using 16S rRNA amplicon sequencing data. The focus 
+
+## Load libraries
+```{r, eval=FALSE, memssage=FALSE, warning=FALSE, include=FALSE}
+library(ampvis2)
+library(openxlsx)
+library (reshape2)
+library (dplyr)
+```
+
+## Load data
+```{r, eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+usearch_otutable <- amp_import_usearch(otutab = "ASVtable.tsv", 
+                                       sintax = "ASVs.R1.midas37.sintax")
+
+metadata <- openxlsx::read.xlsx("metadata.xlsx", detectDates = TRUE)
+
+#merge data
+d <- amp_load(usearch_otutable, metadata)
+
+dn <- amp_subset_samples(d, minreads = 13500, normalise = TRUE)
+```
+
+#Subset filamentous bacteria
+```{r}
+fil <-amp_subset_taxa(dn, tax_vector =  c("g__Acinetobacter",
+                                          "g__Leptothrix",
+                                          "g__Nocardioides",
+                                          "g__Ca_Alysiosphaera",
+                                          "g__Anaerolinea",
+                                          "g__Beggiatoa",
+                                          "g__Ca_Amarolinea",
+                                          "g__Ca_Microthrix",
+                                          "g__Ca_Nostocoida",
+                                          "g__Ca_Promineofilum",
+                                          "g__Ca_Sarcinithrix",
+                                          "g__Ca_Villigracilis",
+                                          "g__Fodinicola",
+                                          "g__Gordonia",
+                                          "g__Haliscomenobacter",
+                                          "g__Kouleothrix",
+                                          "g__Leucothrix",
+                                          "g__Neomegalonema",
+                                          "g__Skermania",
+                                          "g__Sphaerotilus",
+                                          "g__Thiothrix",
+                                          "g__Turicibacter",
+                                          "g__Trichococcus",
+                                          "g__Collinsella",
+                                          "g__Streptococcus",
+                                          "g__Lactococcus",
+                                          "g__Dietzia",
+                                          "g__Mycobacterium",
+                                          "s__Ca_Defluviicoccus_seviourii",
+                                          "s__midas_s_328",
+                                          "g__midas_g_105",
+                                          "g__midas_g_344",
+                                          "g__midas_g_1668",
+                                          "g__midas_g_2111"), normalise=FALSE)
+
+fil$tax$Genus[fil$tax$Genus == "g__Defluviicoccus"] <- "g__Defluviicoccus_seviourii"
+fil$tax$Genus[fil$tax$Genus == "g__Tetrasphaera"] <- "g__Tetrasphaera_midas_s_328"
+```
+
+#Figure 1. Distribution of filamentous bacteria in Danish municipal BNR WWTPs. Phylum and genus or species names are shown. Each box represents the samples collected from 17 municipal full-scale WWTPs during the 13-year long survey. Coral: filamentous morphology observed in situ; green: variable morphology observed in situ; blue: filamentous morphology observed in pure culture with no in situ information available.
+```{r Figure 1}
+# filamentous in AS: #F8766D (coral)
+pi <- "#F8766D"
+# variable morphology in AS: #7CAE00 (green)
+gr <- "#7CAE00"
+#filamentous in pure culture: #619CFF (blue)
+bl <- "#619CFF"
+
+h <- amp_heatmap(fil,
+            group_by = c("Plant", "Date"),
+            tax_aggregate = "Genus",
+            tax_add = c("Phylum"),
+            tax_show = 50,
+            normalise = FALSE,
+            plot_na = FALSE,
+            color_vector = c("#91bfdb","#ffffbf","#fc8d59")
+            ) +
+  theme(axis.text.x = element_text(angle = 45, size=10, vjust = 1),
+        axis.text.y = element_text(size=10),
+        legend.position="right")
+
+hc <- dcast(h$data, 
+      Group~Display,
+      value.var = "Abundance",
+      fun.aggregate = mean)
+
+hb <- hc[ , -which(names(hc) %in% c("Group"))]
+hbm <- melt(hb)
+
+box <- ggplot(hbm, aes(x=reorder(variable, value, FUN = median), y=value)) + 
+  geom_boxplot(fill= c(pi, pi, pi, gr, pi, 
+                       gr, pi, bl, pi, pi, 
+                       pi, pi, gr, pi, gr, 
+                       pi, gr, pi, bl, gr, 
+                       pi, pi, bl, pi, bl, 
+                       bl, pi, pi, gr, pi)) +
+  scale_y_log10(breaks = c(0.1, 1.0, 10), labels = c(0.1, 1.0, 10)) +
+  theme_bw() +
+   theme(axis.text.x = element_text(size = 11), 
+        axis.text.y = element_text(size = 11),
+        legend.position = "none") +
+  xlab("") + 
+  ylab("Read Abundance (%)") +
+  coord_flip()
+
+box
+
+ggsave(filename = "Figure 1.jpg", plot = box, width = 6.5, height = 8, dpi = 600)
+```
+
+#Figure 2. PCoA plot using Bray-Curtis dissimilarity matrix of a) total community; b) filamentous community and c) boxplot visualizing total filament abundance across the analyzed samples.
+```{r Figure 2}
+#Figure 2a. PCoA total community
+p1 <- amp_ordinate(data = dn,
+             filter_species = 0.01,
+             type = "PCOA",
+             distmeasure = "bray",
+             transform = "none",
+             sample_color_by = "Plant",
+             sample_colorframe = TRUE,
+             sample_colorframe_label = "Plant",
+             sample_colorframe_label_size = 3.3
+             )+
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 11), 
+        axis.text.y = element_text(size = 11),
+        legend.text = element_text(size = 11, color = "black")
+       )
+p1
+ggsave(filename = "Figure 2a.png", plot = p1, width = 6.5, height = 5, units = "cm", dpi = 300)
+
+#Figure 2b. PCoA filaments
+p2 <- amp_ordinate(data = fil,
+             filter_species = 0.01,
+             type = "PCOA",
+             distmeasure = "bray",
+             transform = "none",
+             sample_color_by = "Plant",
+             sample_colorframe = TRUE,
+             sample_colorframe_label = "Plant",
+             sample_colorframe_label_size = 3.3
+             )+
+  theme_bw() +
+   theme(axis.text.x = element_text(size = 11), 
+        axis.text.y = element_text(size = 11),
+        legend.text = element_text(size = 11, color = "black")
+       )
+p2
+ggsave(filename = "Figure 2b.png", plot = p2, width = 6.5, height = 5, dpi = 300)
+
+#Figure 2c. Total filament abundance
+#prepare col with total filament abundance
+hc[,"Total_filaments"] <- 0
+hc[,"Total_filaments"] <- rowSums(cbind(hc[,2:31]))
+
+#merge filament abundance data with metadata
+df <- fil$metadata[,c("Sample", "Plant", "Date", "DSVI")]
+df[,"Group"] <- paste0(df$Plant, " ", df$Date)
+hcb <- merge.data.frame(hc, df, by ="Group", all.x = TRUE)
+
+#boxplot
+ggplot(hcb, aes(x=Plant, y=Total_filaments)) + 
+  geom_boxplot(outlier.size = 0.5) +
+  theme_bw() +
+  theme(axis.text.y = element_text(size = 10, colour = "black", face = "plain"),
+        axis.text.x = element_text(size = 11, colour = "black", vjust = 1, hjust = 1, angle = 45),
+        axis.title.y = element_text(size = 10)) +
+  xlab("") + 
+  ylab("Total filaments\n% read abundance")
+
+ggsave(filename = "Figure 2c.png", width = 4.7, height = 5, dpi = 300)
+```
+
+#Figure 3. DSVI measurements for the Danish municipal BNR WWTPs for the years 2006-2018. Red line denotes the empirical 120 mL/g upper threshold for sludge with good settling properties.
+```{r Figure 3}
+
+ggplot(fil$metadata, aes_string(x = "Date", y= "DSVI")) + 
+  geom_point(size = 1.5, alpha = 0.7) +
+  facet_wrap(~Plant, ncol = 6) +
+  geom_hline(yintercept = 120, color ="red", size = 0.5) +
+  xlab(" ") +
+  ylab("DSVI [mL/g]") +
+  scale_y_continuous(breaks=seq(0, 300, 50)) +
+  scale_x_date(date_labels = "%Y", breaks = "2 years") +
+  theme_bw() +
+  theme(axis.text = element_text(size = 9.5, colour = "black"),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.title = element_text(size = 10, color = "black")
+         )
+
+ggsave(filename = "Figure 3.jpg", width = 18, height = 10, units = "cm", dpi = 600)
+```
+
+#Figure 4. Read abundance of filamentous genera in full-scale Danish WWTPs for the years 2006-2018. The low-abundant filamentous genera are shown in grey, while the abundant ones are shown in color.
+```{r Figure 4}
+#prepare data for timeseries of filaments in each Plant
+hs <- hcb[ , -which(names(hcb) %in% c("Group","Sample", "DSVI", "Total_filaments"))]
+hm <- reshape2::melt(hs, id.var = c("Plant", "Date")) 
+
+ts_fil <- ggplot(hm, aes(x = Date, y = value)) +
+  geom_line(aes(colour = factor(variable))) +
+  facet_wrap(~Plant, ncol = 3) +
+  ylab("Abundance [%]") +
+  xlab("") +
+  scale_x_date(date_labels = "%Y", breaks = "2 years") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 9.5, colour = "black"),         axis.text.y = element_text(size = 9.5, color = "black"),
+        legend.position = "right",
+        legend.title = element_blank(),
+        legend.text = element_text(size = 8.5)) +
+  scale_color_manual(values = c("grey", "grey", "grey", "grey", "grey", "grey", "grey", "grey", "grey", "grey", "grey", "grey", "grey", "#bfef45", "grey", "grey", "#800000", "grey", "#911eb4", "#808000", "grey", "#f032e6", "#000075", "grey", "grey", "#4363d8", "#3cb44b", "#00BFC4", "#f58231", "#e6194B")) +
+  guides(color = guide_legend(reverse=TRUE))
+
+ts_fil
+
+ggsave(filename = "Figure 4.png", plot = ts_fil, width = 20, height = 20, units = "cm", dpi = 600)
+```
+
+#Figure 5 (b and d). Abundance of filamentous microorganisms and DSVI values for the years 2006 - 2018 in b) Bjergmarken WWTP; top panel: the abundance of total filaments, Ca. Microthrix and Ca. Amarolinea and their sum; middle panel: DSVI; bottom panel: the abundance of other filamentous genera in the plant. The relationship between total filaments abundance (solid circles) and summed Ca. Microthrix and Ca. Amarolinea abundance (empty circles) and DSVI in d) Bjergmarken WWTP (p-value for all reported R2 is < 0.001).
+####prepare the data
+```{r Figure 5b and 5d data}
+#Figure 5a and 5c are based on the detailed Aalborg W time-series data included at the end of this file
+
+#analysis of data for Bjergmarken:
+#prepare the data
+h <- amp_heatmap(fil,
+            group_by = c("Plant", "Date"),
+            tax_aggregate = "Genus",
+            tax_show = 50,
+            normalise = FALSE,
+            plot_na = FALSE,
+            color_vector = c("#91bfdb","#ffffbf","#fc8d59")
+            ) +
+  theme(axis.text.x = element_text(angle = 45, size=10, vjust = 1),
+        axis.text.y = element_text(size=10),
+        legend.position="right")
+
+hc <- dcast(h$data, 
+      Group~Display,
+      value.var = "Abundance",
+      fun.aggregate = mean)
+
+#prepare col with total filament abundance
+hc[,"Total_filaments"] <- 0
+hc[,"Total_filaments"] <- rowSums(cbind(hc[,2:31]))
+
+#prepare col with summed abundance of Ca_Amarolinea and Ca_Microthrix
+hc[,"Ca_Amarolinea_and_Ca_Microthrix"] <- 0
+hc[,"Ca_Amarolinea_and_Ca_Microthrix"] <- rowSums(cbind(hc[,c(29,31)]))
+
+#merge with metadata
+hcb <- merge.data.frame(hc, df, by ="Group", all.x = TRUE)
+hs <- hcb[ , -which(names(hcb) %in% c("Group","Sample"))]
+
+#subset Bjergmarken data
+sub <- subset(hs, Plant == "Bjergmarken")
+
+#subset data for the upper panel (Ca_Amarolinea, Ca_Microthrix and Total_filaments)
+sub1 <- subset(sub, select = c(Date, Total_filaments, Ca_Amarolinea_and_Ca_Microthrix, Ca_Amarolinea, Ca_Microthrix))
+sub1$panel <- "Abundant filaments [%]"
+d1 <- melt(sub1, id.var = c("Date", "panel"))
+
+#subset data for lower panel (other filaments)
+sub2 <- subset(sub, select = c(Date, Trichococcus, Gordonia, Defluviicoccus_seviourii, Ca_Promineofilum, Ca_Villigracilis, Ca_Sarcinithrix, Dietzia, Mycobacterium))
+sub2$panel <- "Other filaments [%]"
+d2 <- melt(sub2, id.var = c("Date", "panel"))
+
+#subset DSVI data
+d3 <- subset(sub, select = c(Date, DSVI))
+d3$panel <- "DSVI [mL/g]"
+d3 <- melt(d3, id.var = c("Date", "panel"))
+
+d13 <- rbind(d1, d3)
+
+```
+
+####Figure 5b
+```{r panel fig}
+#plot upper and middle panel
+p <- ggplot(data = d13, mapping = aes(x = Date, y = value)) + 
+     scale_x_date(date_labels = "%Y-%m", date_breaks = "6 months") +
+     theme_bw() +  
+     theme(axis.text = element_text(size = 10, colour = "black"), 
+         axis.text.x = element_blank(),
+         axis.ticks.x = element_blank(),
+         strip.text = element_text(size = 11),
+         legend.text = element_text(size = 11, color = "black")
+         ) +
+      facet_grid(panel~., scale="free_y")
+
+#add DSVI data 
+p <- p + layer(data = d3[!is.na(d3$value),], 
+               geom = c("line"), params = list(color = "black", size = 0.6), 
+               stat = "identity", position = "identity")
+
+#add horizontal line
+p <- p + layer(data = d3, 
+               geom = "hline", 
+               params = list(yintercept = 120, color ="red", size = 0.5), 
+               stat = "identity", position = "identity")
+
+#add Ca_Microthrix and Ca_Amarolinea abundance
+p <- p + layer(data = d1[!is.na(d1$value),], 
+               mapping = aes(x = Date, y = value, color = variable), 
+               geom = "line",
+               params = list(size = 0.7),
+               stat = "identity", position = "identity") 
+
+p <- p + scale_colour_manual(name = "Bjergmarken", breaks=c("Total_filaments","Ca_Amarolinea_and_Ca_Microthrix","Ca_Amarolinea", "Ca_Microthrix"),
+values = c("#4A3EC9", "#641A69", "#224856", "#78BF7B")
+                            ) + xlab(" ") + ylab(" ")
+
+#place legend in the upper right corner
+p <- p + theme(plot.margin=unit(c(0,7.6,0,0),"cm"))+
+ theme(legend.position=c(1.3,0.8))
+
+p
+
+ggsave(filename = "Figure5b_top and middle panel.png", width = 10, height = 4.5, dpi = 300)
+
+
+#plot lower panel
+k <- ggplot(data = d2, mapping = aes(x = Date, y = value)) + 
+     scale_x_date(date_labels = "%Y-%m", date_breaks = "6 months") +
+     theme_bw() +  
+     theme(axis.text = element_text(size = 10, colour = "black"), 
+         axis.text.x = element_text(size = 10, angle = 45, vjust = 1.0, hjust = 1.0),
+         strip.text = element_text(size = 11),
+         legend.text = element_text(size = 11, color = "black")
+         ) +
+      facet_grid(panel~.) 
+
+#add abundance data
+k <- k + layer(data = d2[!is.na(d2$value),], mapping = aes(x = Date, y = value, color = variable), geom = "line",
+               params = list(size = 0.4),
+               stat = "identity", position = "identity")
+
+k <- k + scale_colour_manual(name = "", breaks=c("Trichococcus", "Gordonia", "Defluviicoccus_seviourii", "Ca_Promineofilum", "Ca_Sarcinithrix", "Dietzia", "Ca_Villigracilis", "Mycobacterium"),
+                             values = c("#de4f2f","#deb22f", "#2f78de", "#a72fde", "#C5DEB4", "#3F9273", "#98CC90", "#E8EFD9")
+                            ) + xlab(" ") + ylab(" ")
+
+#adjust the y axis 
+k <- k + scale_y_continuous(limits = c(0, 40))
+
+k
+
+ggsave(filename = "Figure5b_lower panel.png", width = 9.35, height = 2.95, dpi = 300)
+
+```
+
+####Figure 5d
+```{r}
+#calculate R2 values 
+#Ca_Amarolinea and Ca_Micro~DSVI
+mAM <- lm(DSVI ~ Ca_Amarolinea_and_Ca_Microthrix, sub);
+r2AM = format(summary(mAM)$r.squared, digits = 2)
+lb1 <- paste("R^2 == ", r2AM)
+#check p-value
+summary(mAM)$coefficients[,4] 
+
+#Total_filaments~DSVI
+mT <- lm(DSVI ~ Total_filaments, sub);
+r2T = format(summary(mT)$r.squared, digits = 2)
+lb2 <- paste("R^2 == ", r2T)
+#check p-value
+summary(mT)$coefficients[,4] 
+
+#subset data for the plot
+sc <- subset(sub, select = c(Total_filaments, Ca_Amarolinea_and_Ca_Microthrix, DSVI))
+scm <- melt(sc, id.var = c("DSVI")) 
+
+#plot Figure 5d
+b <- ggplot(scm, aes_string(x = "value", y= "DSVI", shape = "variable", solid = FALSE)) + 
+  geom_point(size = 3) +
+  scale_shape_manual(name = "Bjergmarken", values = c(16, 1, 6, 17), breaks = c("Ca_Amarolinea_and_Ca_Microthrix", "Total_filaments"))+   
+  geom_smooth(method=lm, se=FALSE, color = "black") +
+  xlab("Abundance [%]") + 
+  ylab("DSVI [ml/g]") +
+  scale_y_continuous(breaks=seq(0, 400, 50)) +
+  #geom_text(data = hmssub, aes(label = Plant, size = 3)) +
+  theme_bw() +
+  theme(axis.text = element_text(size = 11, colour = "black"), 
+        axis.title = element_text(size = 11, color = "black"),
+        legend.text = element_text(size = 9, color = "black"),
+        legend.title = element_text(size = 11, color = "black"),
+        legend.position = c(0.36, 0.85),
+        legend.background = element_blank()
+       ) +
+  geom_text(x = 15, y = 175, label = lb1, parse = TRUE)  +
+  geom_text(x = 32, y = 135, label = lb2, parse = TRUE)
+
+b
+
+ggsave(filename = "Figure5d.png", width = 4, height = 4, dpi = 600)
+```
+
+#Figure 7b. Relationship between the other abundant filamentous bacteria found in activated sludge and DSVI in Bjergmarken WWTPs experiencing persistent settling problems.
+```{r Figure 7b}
+#Figure 7a is based on the detailed Aalborg W time-series data included at the end of this file
+
+#subset other filaments and DSVI
+Bje_o <- subset(sub, select = c(Trichococcus, Gordonia, Defluviicoccus_seviourii, Fodinicola, Ca_Promineofilum, Nocardioides, Ca_Villigracilis,  Ca_Sarcinithrix, DSVI))
+
+Bm <- melt(Bje_o, id.var = c("DSVI"))
+
+#function to display only 1 decimal
+scaleFUN <- function(x) sprintf("%.1f", x)
+
+#specify facet order
+Bm$variable_f = factor(Bm$variable, levels=c("Trichococcus", "Ca_Promineofilum", "Ca_Villigracilis", "Ca_Sarcinithrix", "Gordonia", "Defluviicoccus_seviourii", "Fodinicola", "Nocardioides"))
+
+ggplot(Bm, aes_string(x = "value", y= "DSVI")) + 
+  geom_point(data = subset(Bm, variable == "Trichococcus"), size = 3, shape = 1) +
+  geom_point(data = subset(Bm, variable == "Ca_Promineofilum"), size = 3, shape = 1) +
+  geom_point(data = subset(Bm, variable == "Ca_Villigracilis"), size = 3, shape = 1) +
+  geom_point(data = subset(Bm, variable == "Ca_Sarcinithrix"), size = 3, shape = 1) +
+  geom_point(data = subset(Bm, variable == "Gordonia"), size = 3, shape = 1) +
+  geom_point(data = subset(Bm, variable == "Defluviicoccus_seviourii"), size = 3, shape = 1) +
+  geom_point(data = subset(Bm, variable == "Fodinicola"), size = 3, shape = 1) +
+  geom_point(data = subset(Bm, variable == "Nocardioides"), size = 3, shape = 1) +
+  facet_wrap(~variable_f, scales = "free", ncol = 8) +
+  #scale_shape_manual(name = "Bjergmarken", values = c(16, 1, 6, 17))+   
+  geom_smooth(method=lm, se=FALSE, color = "black") +
+  scale_x_continuous(labels=scaleFUN) +
+  xlab("Abundance [%]") + 
+  ylab("DSVI [ml/g]") +
+  #scale_y_continuous(breaks=seq(0, 400, 50)) +
+  #geom_text(data = hmssub, aes(label = Plant, size = 3)) +
+  theme_bw() +
+  theme(axis.text = element_text(size = 11, colour = "black"), 
+        axis.title = element_text(size = 12, color = "black"),
+        legend.text = element_text(size = 12, color = "black"),
+        legend.title = element_text(size = 12, color = "black")
+       ) 
+
+ggsave(filename = "Figure 7b.png", width = 15, height = 4, dpi = 300)
+
+```
+
+#Figure 9. Species-level diversity of Ca. Microthrix and Ca. Amarolinea based on the 16S rRNA amplicon sequencing. Each data point represents the average abundance in all the samples from given plant included in the analysis.
+```{r Figure 9}
+#prepare the data
+am <- amp_subset_taxa(fil, tax_vector = c("g__Ca_Amarolinea", "g__Ca_Microthrix"))
+
+p <- amp_heatmap(am,
+            group_by = c("Plant"),
+            tax_aggregate = "Species",
+            tax_add = c("Genus"),
+            tax_show = 6,
+            normalise = FALSE,
+            plot_na = FALSE,
+            color_vector = c("#91bfdb","#ffffbf","#fc8d59")
+            ) +
+  theme(axis.text.x = element_text(angle = 45, size=10, vjust = 1),
+        axis.text.y = element_text(size=10),
+        legend.position="right")
+
+
+pp <- dcast(p$data, 
+      Group~Display,
+      value.var = "Abundance",
+      fun.aggregate = mean)
+
+ppm <- melt(pp)
+add <- colsplit(ppm$variable, ";", c("Genus", "Species"))
+ppmb <- cbind(ppm, add)
+
+#plot Figure 9
+ggplot(ppmb, aes(x = Group, y = variable, color = Genus)) + 
+  geom_point(aes(size = value)) +
+  scale_size(limits= c(0.1, max(ppmb$value)), breaks = c(0.1, 0.5, 1.0, 2.5, 5.0)) +
+  theme_bw() +
+   theme(axis.text = element_text(size = 10, colour = "black"), 
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        axis.title = element_text(size = 10, face = "bold", color = "black"),
+        panel.background = element_rect(colour = "black"),
+        legend.text = element_text(size = 10),
+        legend.title = element_text(size = 10)
+        ) +
+    labs(size = "% Read abundance", colour="Genus") +
+    xlab("") +
+    ylab("")
+    ylim("Ca_Amarolinea; g__Ca_Amarolinea_ASV325",
+         "Ca_Amarolinea; Ca_Amarolinea_aalborgensis",
+         "Ca_Amarolinea; midas_s_553",
+         "Ca_Amarolinea; midas_s_1",
+         "Ca_Microthrix; midas_s_2", 
+         "Ca_Microthrix; Ca_Microthrix_parvicella")
+    
+ggsave(filename = "Figure 9.jpg", width = 8, height = 3, dpi = 600)
+
+```
+
+#Figure 10. The relationship between total filament read abundance and DSVI. Red line indicates DSVI equal to 120 mL/g SS.
+```{r Figure 10}
+ggplot(hcb, aes_string(x = "Total_filaments", y= "DSVI")) + 
+  geom_point(size = 1.5, alpha = 0.7) +
+  facet_wrap(~Plant, ncol = 6) +
+  geom_hline(yintercept = 120, color ="red", size = 0.5) +
+  geom_smooth(method=lm, se=FALSE, color = "black") +
+  xlab("Total filaments\n% read abundance") +
+  ylab("DSVI [ml/g]") +
+  scale_y_continuous(breaks=seq(0, 300, 50)) +
+  theme_bw() +
+  theme(axis.text = element_text(size = 9.5, colour = "black"),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.title = element_text(size = 10, color = "black")
+         )
+
+ggsave(filename = "Figure 10.jpg", width = 18, height = 10, units = "cm", dpi = 600)
+```
+
+#Figure S1. Heatmap showing mean read abundance of filamentous bacteria in percent of all amplicon reads. The numbers represent the average read abundance for the given WWTP. The survey was performed in the years 2006–2018 with up to four samples per year for each plant. Phylum and genus taxonomic information is shown.
+```{r Figure S1}
+h1 <- amp_heatmap(fil,
+            group_by = c("Plant"),
+            tax_aggregate = "Genus",
+            tax_add = c("Phylum"),
+            tax_show = 50,
+            normalise = FALSE,
+            plot_na = FALSE,
+            color_vector = c("#91bfdb","#ffffbf","#fc8d59")
+            ) +
+  theme(axis.text.x = element_text(angle = 45, size=10, vjust = 1),
+        axis.text.y = element_text(size=10),
+        legend.position="right")
+
+ggsave(filename = "Figure S1.pdf", plot = h1, width = 10, height = 10, dpi = 300)
+
+```
+
+#Figure S2. Species-level diversity of the filaments found in Danish WWTPs. Species occurring at mean abundance >= 0.1% are shown. Each number represents the average abundance in all the samples from given plant included in the analysis.
+```{r Figure S2}
+#prepare the data
+fil_insitu <- amp_subset_taxa(dn, tax_vector =  c("g__Acinetobacter",
+                                                  "g__Ca_Alysiosphaera",
+                                                  "g__Beggiatoa",
+                                                  "g__Ca_Amarolinea",
+                                                  "g__Ca_Microthrix",
+                                                  "g__Ca_Nostocoida",
+                                                  "g__Ca_Promineofilum",
+                                                  "g__Ca_Sarcinithrix",
+                                                  "g__Ca_Villigracilis",
+                                                  "g__Gordonia",
+                                                  "g__Haliscomenobacter",
+                                                  "g__Kouleothrix",
+                                                  "g__Leucothrix",
+                                                  "g__Neomegalonema",
+                                                  "g__Skermania",
+                                                  "g__Sphaerotilus",
+                                                  "g__Thiothrix",
+                                                  "g__Trichococcus",
+                                                  "g__Collinsella",
+                                                  "g__Streptococcus",
+                                                  "g__Lactococcus",
+                                                  "g__Dietzia",
+                                                  "g__Mycobacterium",
+                                                  "s__Ca_Defluviicoccus_seviourii",
+                                                  "s__midas_s_328",
+                                                  "g__midas_g_105",
+                                                  "g__midas_g_344",
+                                                  "g__midas_g_1668",
+                                                  "g__midas_g_2111"
+                                                   ), normalise=FALSE)
+
+fil_insitu$tax$Genus[fil_insitu$tax$Genus == "g__Defluviicoccus"] <- "g__Defluviicoccus_seviourii"
+fil_insitu$tax$Genus[fil_insitu$tax$Genus == "g__Tetrasphaera"] <- "g__Tetrasphaera_midas_s_328"
+
+
+p <- amp_heatmap(fil_insitu,
+            group_by = c("Mean"),
+            tax_aggregate = "Species",
+            tax_add = c("Genus"),
+            tax_show = 50,
+            normalise = FALSE,
+            plot_na = FALSE,
+            round = 2,
+            color_vector = c("#91bfdb","#ffffbf","#fc8d59")
+            ) +
+  theme(axis.text.x = element_text(angle = 45, size=10, vjust = 1),
+        axis.text.y = element_text(size=10),
+        legend.position="right")
+
+pp <- dcast(p$data, 
+      Group~Display,
+      value.var = "Abundance",
+      fun.aggregate = mean)
+
+ppm <- melt(pp)
+
+
+#plot species >= mean 0.1% abundance in all samples
+amp_heatmap(fil_insitu,
+            group_by = c("Plant"),
+            tax_aggregate = "Species",
+            tax_add = c("Genus"),
+            tax_show = 35,
+            normalise = FALSE,
+            plot_na = FALSE,
+            color_vector = c("#91bfdb","#ffffbf","#fc8d59"),
+            order_y_by = c("Thiothrix; g__Thiothrix_ASV392",
+                           "midas_g_1668; midas_s_1668",
+                           "Kouleothrix; midas_s_2308",
+                           "Kouleothrix; g__Kouleothrix_ASV433",
+                           "Sphaerotilus; Sphaerotilus_montanus",
+                           "midas_g_344; midas_s_344",
+                           "midas_g_105; midas_s_868",
+                           "midas_g_105; midas_s_661",
+                           "midas_g_105; midas_s_105",
+                           "Haliscomenobacter; Haliscomenobacter_hydrossis",
+                           "Defluviicoccus_seviourii; Ca_Defluviicoccus_seviourii",
+                           "Streptococcus; Streptococcus_parasuis",
+                           "Streptococcus; midas_s_146",
+                           "Lactococcus; Lactococcus_raffinolactis",
+                           "Mycobacterium; midas_s_628",
+                           "Dietzia; g__Dietzia_ASV97",
+                           "Tetrasphaera_midas_s_328; midas_s_328",
+                           "Gordonia; midas_s_403",
+                           "Gordonia; Gordonia_defluvii",
+                           "Ca_Promineofilum; g__Ca_Promineofilum_ASV332",
+                           "Ca_Promineofilum; midas_s_609",
+                           "Ca_Promineofilum; midas_s_441",
+                           "Ca_Promineofilum; g__Ca_Promineofilum_ASV57",
+                           "Ca_Promineofilum; midas_s_176",
+                           "Ca_Sarcinithrix; midas_s_2699",
+                           "Ca_Sarcinithrix; midas_s_425",
+                           "Ca_Villigracilis; midas_s_9223",
+                           "Ca_Villigracilis; midas_s_471",
+                           "Ca_Amarolinea; g__Ca_Amarolinea_ASV325",
+                           "Ca_Amarolinea; Ca_Amarolinea_aalborgensis",
+                           "Ca_Amarolinea; midas_s_553",
+                           "Ca_Amarolinea; midas_s_1",
+                           "Ca_Microthrix; midas_s_2",
+                           "Ca_Microthrix; Ca_Microthrix_parvicella",
+                           "Trichococcus; midas_s_4")
+            ) +
+  theme(axis.text.x = element_text(angle = 45, size=10, vjust = 1),
+        axis.text.y = element_text(size=10),
+        legend.position="right")
+
+ggsave(filename = "Figure S2", plot = x, width = 9.5, height = 10, dpi = 300)
+
+```
+
+
+#Detailed Aalborg W time-series analysis
+#Load data
+```{r }
+remove(list = ls())
+
+usearch_otutable <- amp_import_usearch(otutab = "C:/Users/LAB-PC/Desktop/Filament_paper/time series AAV_2020/data/ASVtable_Aalborg_W.tsv", 
+                                       sintax = "C:/Users/LAB-PC/Desktop/Filament_paper/time series AAV_2020/data/ASVs.R1.Aalborg_W.midas37.sintax")
+
+metadata <- openxlsx::read.xlsx("C:/Users/LAB-PC/Desktop/Filament_paper/time series AAV_2020/data/metadata_Aalborg_W.xlsx", detectDates = TRUE)
+
+#merge data
+d <- amp_load(usearch_otutable, metadata)
+
+dn <- amp_subset_samples(d, minreads = 13500, normalise = TRUE)
+
+```
+
+#Subset filamentous bacteria
+```{r}
+fil <-amp_subset_taxa(dn, tax_vector =  c("g__Acinetobacter",
+                                          "g__Leptothrix",
+                                          "g__Nocardioides",
+                                          "g__Ca_Alysiosphaera",
+                                          "g__Anaerolinea",
+                                          "g__Beggiatoa",
+                                          "g__Ca_Amarolinea",
+                                          "g__Ca_Microthrix",
+                                          "g__Ca_Nostocoida",
+                                          "g__Ca_Promineofilum",
+                                          "g__Ca_Sarcinithrix",
+                                          "g__Ca_Villigracilis",
+                                          "g__Fodinicola",
+                                          "g__Gordonia",
+                                          "g__Haliscomenobacter",
+                                          "g__Kouleothrix",
+                                          "g__Leucothrix",
+                                          "g__Neomegalonema",
+                                          "g__Skermania",
+                                          "g__Sphaerotilus",
+                                          "g__Thiothrix",
+                                          "g__Turicibacter",
+                                          "g__Trichococcus",
+                                          "g__Collinsella",
+                                          "g__Streptococcus",
+                                          "g__Lactococcus",
+                                          "g__Dietzia",
+                                          "g__Mycobacterium",
+                                          "s__Ca_Defluviicoccus_seviourii",
+                                          "s__midas_s_328",
+                                          "g__midas_g_105",
+                                          "g__midas_g_344",
+                                          "g__midas_g_1668",
+                                          "g__midas_g_2111"), normalise=FALSE)
+
+fil$tax$Genus[fil$tax$Genus == "g__Defluviicoccus"] <- "g__Defluviicoccus_seviourii"
+fil$tax$Genus[fil$tax$Genus == "g__Tetrasphaera"] <- "g__Tetrasphaera_midas_s_328"
+```
+
+#Figure 5 (a and c). Abundance of filamentous microorganisms and DSVI values for the years 2006 - 2018 in a) Aalborg W WWTP; top panel: the abundance of total filaments, Ca. Microthrix and Ca. Amarolinea and their sum; middle panel: DSVI; bottom panel: the abundance of other filamentous genera in the plant. The relationship between total filaments abundance (solid circles) and summed Ca. Microthrix and Ca. Amarolinea abundance (empty circles) and DSVI in c) Aalborg W WWTP (p-value for all reported R2 is < 0.001).
+####prepare the data
+```{r Figure 5a and 5c data}
+#analysis of data for Aalborg W:
+#prepare the data
+h <- amp_heatmap(fil,
+            group_by = c("Plant", "Date"),
+            tax_aggregate = "Genus",
+            tax_show = 50,
+            normalise = FALSE,
+            plot_na = FALSE,
+            color_vector = c("#91bfdb","#ffffbf","#fc8d59")
+            ) +
+  theme(axis.text.x = element_text(angle = 45, size=10, vjust = 1),
+        axis.text.y = element_text(size=10),
+        legend.position="right")
+
+hc <- dcast(h$data, 
+      Group~Display,
+      value.var = "Abundance",
+      fun.aggregate = mean)
+
+#prepare col with total filament abundance
+hc[,"Total_filaments"] <- 0
+hc[,"Total_filaments"] <- rowSums(cbind(hc[,2:30]))
+
+#prepare col with summed abundance of Ca_Amarolinea and Ca_Microthrix
+hc[,"Ca_Amarolinea_and_Ca_Microthrix"] <- 0
+hc[,"Ca_Amarolinea_and_Ca_Microthrix"] <- rowSums(cbind(hc[,c(29,30)]))
+
+#merge with metadata
+fil$metadata[,"Group"] <- paste0(fil$metadata$Plant, " ", fil$metadata$Date)
+hcb <- merge.data.frame(hc, fil$metadata, by ="Group", all.x = TRUE)
+sub <- hcb[ , -which(names(hcb) %in% c("Group","Sample"))]
+
+#subset data for the upper panel (Ca_Amarolinea, Ca_Microthrix and Total_filaments)
+sub1 <- subset(sub, select = c(Date, Total_filaments, Ca_Amarolinea_and_Ca_Microthrix, Ca_Amarolinea, Ca_Microthrix))
+sub1$panel <- "Abundant filaments [%]"
+d1 <- melt(sub1, id.var = c("Date", "panel"))
+
+#subset data for lower panel (other filaments)
+sub2 <- subset(sub, select = c(Date, Trichococcus, Ca_Promineofilum, Gordonia, midas_g_105, Ca_Villigracilis, Streptococcus, Ca_Sarcinithrix, Mycobacterium))
+sub2$panel <- "Other filaments [%]"
+d2 <- melt(sub2, id.var = c("Date", "panel"))
+
+#subset DSVI data
+d3 <- subset(sub, select = c(Date, DSVI))
+d3$panel <- "DSVI [mL/g]"
+d3 <- melt(d3, id.var = c("Date", "panel"))
+
+d13 <- rbind(d1, d3)
+
+```
+
+####Figure 5a
+```{r panel fig}
+#plot upper and middle panel
+p <- ggplot(data = d13, mapping = aes(x = Date, y = value)) + 
+     scale_x_date(date_labels = "%Y-%m", date_breaks = "6 months") +
+     theme_bw() +  
+     theme(axis.text = element_text(size = 10, colour = "black"), 
+         axis.text.x = element_blank(),
+         axis.ticks.x = element_blank(),
+         strip.text = element_text(size = 11),
+         legend.text = element_text(size = 11, color = "black")
+         ) +
+      facet_grid(panel~., scale="free_y")
+
+#add DSVI data 
+p <- p + layer(data = d3[!is.na(d3$value),], 
+               geom = c("line"), params = list(color = "black", size = 0.6), 
+               stat = "identity", position = "identity")
+
+#add horizontal line
+p <- p + layer(data = d3, 
+               geom = "hline", 
+               params = list(yintercept = 120, color ="red", size = 0.5), 
+               stat = "identity", position = "identity")
+
+#add Ca_Microthrix and Ca_Amarolinea abundance
+p <- p + layer(data = d1[!is.na(d1$value),], 
+               mapping = aes(x = Date, y = value, color = variable), 
+               geom = "line",
+               params = list(size = 0.7),
+               stat = "identity", position = "identity") 
+
+p <- p + scale_colour_manual(name = "Aalborg W", breaks=c("Total_filaments","Ca_Amarolinea_and_Ca_Microthrix","Ca_Amarolinea", "Ca_Microthrix"),
+values = c("#4A3EC9", "#641A69", "#224856", "#78BF7B")
+                            ) + xlab(" ") + ylab(" ")
+
+#place legend in the upper right corner
+p <- p + theme(plot.margin=unit(c(0,7.6,0,0),"cm"))+
+ theme(legend.position=c(1.3,0.8))
+
+p
+
+ggsave(filename = "Figure5a_top and middle panel.png", width = 10, height = 4.5, dpi = 300)
+
+
+#plot lower panel
+k <- ggplot(data = d2, mapping = aes(x = Date, y = value)) + 
+     scale_x_date(date_labels = "%Y-%m", date_breaks = "6 months") +
+     theme_bw() +  
+     theme(axis.text = element_text(size = 10, colour = "black"), 
+         axis.text.x = element_text(size = 10, angle = 45, vjust = 1.0, hjust = 1.0),
+         strip.text = element_text(size = 11),
+         legend.text = element_text(size = 11, color = "black")
+         ) +
+      facet_grid(panel~.) 
+
+#add abundance data
+k <- k + layer(data = d2[!is.na(d2$value),], mapping = aes(x = Date, y = value, color = variable), geom = "line",
+               params = list(size = 0.4),
+               stat = "identity", position = "identity")
+
+k <- k + scale_colour_manual(name = "", breaks=c("Trichococcus", "Ca_Promineofilum", "Gordonia", "midas_g_105", "Ca_Villigracilis", "Streptococcus",  "Ca_Sarcinithrix", "Mycobacterium"),
+                             values = c("#de4f2f","#a72fde", "#deb22f", "#2B676A", "#C5DEB4", "#3F9273", "#98CC90", "#E8EFD9")
+                            ) + xlab(" ") + ylab(" ")
+
+#adjust the y axis 
+k <- k + scale_y_continuous(limits = c(0, 35))
+
+k
+
+ggsave(filename = "Figure5a_lower panel.png", width = 9.35, height = 2.95, dpi = 300)
+
+```
+
+####Figure 5c
+```{r}
+#calculate R2 values 
+#Ca_Amarolinea and Ca_Micro~DSVI
+mAM <- lm(DSVI ~ Ca_Amarolinea_and_Ca_Microthrix, sub);
+r2AM = format(summary(mAM)$r.squared, digits = 2)
+lb1 <- paste("R^2 == ", r2AM)
+#check p-value
+summary(mAM)$coefficients[,4] 
+
+#Total_filaments~DSVI
+mT <- lm(DSVI ~ Total_filaments, sub);
+r2T = format(summary(mT)$r.squared, digits = 2)
+lb2 <- paste("R^2 == ", r2T)
+#check p-value
+summary(mT)$coefficients[,4] 
+
+#subset data for the plot
+sc <- subset(sub, select = c(Total_filaments, Ca_Amarolinea_and_Ca_Microthrix, DSVI))
+scm <- melt(sc, id.var = c("DSVI")) 
+
+#plot Figure 5d
+b <- ggplot(scm, aes_string(x = "value", y= "DSVI", shape = "variable", solid = FALSE)) + 
+  geom_point(size = 3) +
+  scale_shape_manual(name = "Aalborg W", values = c(16, 1, 6, 17), breaks = c("Ca_Amarolinea_and_Ca_Microthrix", "Total_filaments"))+   
+  geom_smooth(method=lm, se=FALSE, color = "black") +
+  xlab("Abundance [%]") + 
+  ylab("DSVI [ml/g]") +
+  scale_y_continuous(breaks=seq(0, 400, 50)) +
+  #geom_text(data = hmssub, aes(label = Plant, size = 3)) +
+  theme_bw() +
+  theme(axis.text = element_text(size = 11, colour = "black"), 
+        axis.title = element_text(size = 11, color = "black"),
+        legend.text = element_text(size = 9, color = "black"),
+        legend.title = element_text(size = 11, color = "black"),
+        legend.position = c(0.36, 0.86),
+        legend.background = element_blank()
+       ) +
+  geom_text(x = 5, y = 220, label = lb1, parse = TRUE)  +
+  geom_text(x = 32, y = 175, label = lb2, parse = TRUE)
+
+b
+
+ggsave(filename = "Figure5c.png", width = 4, height = 4, dpi = 600)
+```
+
+#Figure 7a. Relationship between the other abundant filamentous bacteria found in activated sludge and DSVI in Aalborg W WWTPs experiencing persistent settling problems.
+```{r Figure 7a}
+#subset other filaments and DSVI
+AAV_o <- subset(sub, select = c(Trichococcus, Ca_Promineofilum, Gordonia, midas_g_105,  Ca_Villigracilis, Streptococcus,  Ca_Sarcinithrix, Mycobacterium,  DSVI))
+
+Am <- melt(AAV_o, id.var = c("DSVI"))
+
+#function to display only 1 decimal
+scaleFUN <- function(x) sprintf("%.1f", x)
+
+#specify facet order
+Am$variable_f = factor(Am$variable, levels=c("Trichococcus", "Ca_Promineofilum", "Ca_Villigracilis", "Ca_Sarcinithrix", "Gordonia", "midas_g_105", "Streptococcus", "Mycobacterium"))
+
+ggplot(Am, aes_string(x = "value", y= "DSVI")) + 
+  geom_point(data = subset(Am, variable == "Trichococcus"), size = 3, shape = 1) +
+  geom_point(data = subset(Am, variable == "Ca_Promineofilum"), size = 3, shape = 1) +
+  geom_point(data = subset(Am, variable == "Ca_Villigracilis"), size = 3, shape = 1) +
+  geom_point(data = subset(Am, variable == "Ca_Sarcinithrix"), size = 3, shape = 1) +
+  geom_point(data = subset(Am, variable == "Gordonia"), size = 3, shape = 1) +
+  geom_point(data = subset(Am, variable == "midas_g_105"), size = 3, shape = 1) +
+  geom_point(data = subset(Am, variable == "Streptococcus"), size = 3, shape = 1) +
+  geom_point(data = subset(Am, variable == "Mycobacterium"), size = 3, shape = 1) +
+  facet_wrap(~variable_f, scales = "free", ncol = 8) +
+  #scale_shape_manual(name = "Bjergmarken", values = c(16, 1, 6, 17))+   
+  geom_smooth(method=lm, se=FALSE, color = "black") +
+  scale_x_continuous(labels=scaleFUN) +
+  xlab("Abundance [%]") + 
+  ylab("DSVI [ml/g]") +
+  #scale_y_continuous(breaks=seq(0, 400, 50)) +
+  #geom_text(data = hmssub, aes(label = Plant, size = 3)) +
+  theme_bw() +
+  theme(axis.text = element_text(size = 11, colour = "black"), 
+        axis.title = element_text(size = 12, color = "black"),
+        legend.text = element_text(size = 12, color = "black"),
+        legend.title = element_text(size = 12, color = "black")
+       ) 
+
+ggsave(filename = "Figure 7a.png", width = 15, height = 4, dpi = 300)
+
+```
