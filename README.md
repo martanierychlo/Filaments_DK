@@ -1,7 +1,7 @@
 # Filaments_DK
 Frontiers in Microbiology publication: Candidatus Amarolinea and Candidatus Microthrix Are Mainly Responsible for Filamentous Bulking in Municipal Danish Wastewater Treatment Plants
 
-This repository contains R code and data that allows to reproduce analysis and figures presented in the publication mentioned, as well as
+This repository contains R code and metadata that allows to reproduce analysis and figures presented in the above publication, as well as
 metadata for general analysis (metadata.xlsx), and for the analysis of detailed Aalborg W time-series (metadata_Aalborg W.xlsx).
 
 otutable and tax files are available upon request.
