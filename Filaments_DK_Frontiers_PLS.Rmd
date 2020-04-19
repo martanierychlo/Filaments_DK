@@ -1,0 +1,347 @@
+---
+title: "PLS model for Candidatus Amarolinea and Candidatus Microthrix Are Mainly Responsible for Filamentous Bulking in Municipal Danish Wastewater Treatment Plants"
+author: "Chenjing Jiang"
+date: "4/17/2020"
+output: html_document
+---
+
+```{r}
+library(openxlsx)
+library(ampvis2)
+library(mdatools)
+library(lattice)
+library(magrittr)
+library(dplyr)
+library(stringr)
+```
+
+#PLS for Bjergmarken (species level)
+```{r}
+asvtable <- amp_import_usearch(otutab = "ASVtable.tsv", sintax = "ASVs.R1.midas37.sintax")
+metadata <- openxlsx::read.xlsx("metadata.xlsx", detectDates = TRUE)
+Meta <- metadata[(metadata$Plant == "Bjergmarken"),]
+ASV <- read.delim(file = "ASVtable.tsv", sep = "\t", row.names = 1, check.names = F)
+ASV = as.data.frame(ASV)
+ASV <- ASV[,match(Meta$Sample, colnames(ASV)), drop = FALSE]
+ASV = as.matrix(ASV)
+Taxa = asvtable[, 3457:3463]
+rownames(Taxa) = rownames(ASV)
+
+# normalize ASV values
+ASV = t(scale(ASV, center = F, scale = colSums(ASV)))
+
+# subset ASV variables
+ind = apply(ASV, 2, median) > 0.0005
+
+ASV = ASV[, ind]
+Taxa = Taxa[ind, ]
+dim(ASV)
+
+# remove ASVs with unknown Species
+ind = !(is.na(Taxa$Species))
+ASV = ASV[, ind]
+Taxa = Taxa[ind, ]
+
+# combine ASVs to Species
+uSpecies = unique(Taxa$Species[ind])
+uSpecies = uSpecies[-134]
+Species = matrix(0, nrow = nrow(ASV), ncol = length(uSpecies))
+for (i in 1:length(uSpecies)) {
+  Species[, i] = rowSums(ASV[, Taxa$Species == uSpecies[i], drop = F])
+}
+colnames(Species) = uSpecies
+rownames(Species) = rownames(ASV)
+
+
+# reorder ASV and meta data so they match each other
+indMeta = order(rownames(Meta))
+Meta = Meta[indMeta, ]
+indSpecies = order(rownames(Species))
+Species = Species[indSpecies, ]
+
+
+# reorder Species according to the abundance
+ind = order(apply(Species, 2, mean))
+Species = Species[, ind]
+Taxa = Taxa[ind, ]
+
+meanAbu = apply(Species, 2, mean)
+
+
+origDSVI = Meta$DSVI
+logDSVI = log(Meta$DSVI)
+multiDSVI = (Meta$DSVI)^0.8
+
+#distribution of DSVI,from the plot we decided to use the multiDSVI
+attach(Meta)
+par(mfrow = c(2, 2))
+hist(origDSVI, 10, col = 'blue', main = 'Original')
+hist(logDSVI, 10, col = 'blue', main = 'Preprocessed')
+hist(multiDSVI, 10, col = 'blue', main = 'Preprocessed')
+detach(Meta)
+
+#set PLS model
+m = pls(Species, multiDSVI, 10, scale = T, cv = list("ven", 8))
+m = selectCompNum(m, 3)
+summary(m)
+par(mfrow = c(3, 2))
+plotRMSE(m, type = 'b', show.labels = T)
+plotPredictions(m, show.labels = F, show.legend = F)
+plotXResiduals(m, show.labels = T, show.legend = F)
+plotVIPScores(m,show.labels = T)
+plotSelectivityRatio(m,show.labels = T)
+par(mfrow = c(1, 1))
+
+#try to select the variable use vip and sr
+vip = vipscores(m,ncomp =3)
+m2 = pls(Species, multiDSVI, 10, scale = T, cv = list("ven", 8), exclcols = (vip < 1))
+summary(m2)
+
+sr = selratio(m,ncomp = 2)
+m3 = pls(Species, multiDSVI, 10, scale = T, cv = list("ven", 8), exclcols = (sr < 0.2))
+summary(m3)
+
+#It seems that using the vip to select the variables is better
+
+plotRegcoeffs(m2, type = "h", show.ci = TRUE, show.labels = TRUE)
+
+#remove variables that p-valuse above 0.15
+exclcols = m2$coeffs$p.values[,2,1] > 0.15
+m4 = pls(Species, multiDSVI, 10, scale = T, cv = list("ven", 8), exclcols = exclcols)
+summary(m4)
+
+layout(matrix(c(1, 1, 2, 3), nrow = 2, byrow = T))
+plotRegcoeffs(m4, type = 'h', show.ci = T, show.labels = T, xlab = 'Species')
+plotRMSE(m4, type = 'b', show.labels = T)
+plotPredictions(m4$res$cv, xlab ='DSVI^0.8, reference', show.stat = T, col = "red3", ylab = 'DSVI^0.8, reference')
+
+
+#do it again to improve the model
+exclcols2 = m4$coeffs$p.values[,2,1] > 0.15
+m5 = pls(Species, multiDSVI, 10, scale = T, cv = list("ven", 8), exclcols = exclcols2)
+summary(m5)
+
+layout(matrix(c(1, 1, 2, 3), nrow = 2, byrow = T))
+plotRegcoeffs(m5, type = 'h', show.ci = T, show.labels = T, xlab = 'Species')
+plotRMSE(m5, type = 'b', show.labels = T)
+plotPredictions(m5$res$cv, xlab ='DSVI^0.8, reference', show.stat = T, col = "red3", ylab = 'DSVI^0.8, reference')
+
+summary(m5$coeffs, ncomp = 2)
+
+#to extract the data for plots
+#extract the coef
+Bjer_coef <- as.data.frame(m5$coeffs$values)
+Bjer_coef <- Bjer_coef[,2,F]
+colnames(Bjer_coef)[1] <- "coefficients"
+#extract the se
+Bjer_se <- as.data.frame(m5$coeffs$se)
+Bjer_se <- Bjer_se[,2,F]
+colnames(Bjer_se)[1] <- "se"
+#extract the p_value
+Bjer_p <- as.data.frame(m5$coeffs$p.values)
+Bjer_p <- Bjer_p[,2,F]
+colnames(Bjer_p)[1] <- "p_value"
+#merge
+Bjer_pls_var <- cbind(Bjer_coef, Bjer_se, Bjer_p)
+Bjer_pls_var <- subset(Bjer_pls_var, p_value < 0.05)
+Bjer_pls_var <- tibble::rownames_to_column(Bjer_pls_var, "Species")
+
+
+merge <- merge.data.frame(Bjer_pls_var, Taxa, by = "Species", all.x = TRUE) #Taxa should be the original file
+merge_Bjer <- unique(merge)
+
+merge_Bjer[] <- lapply(merge_Bjer, function(x) as.factor(gsub("s__", "", x)))
+merge_Bjer[] <- lapply(merge_Bjer, function(x) as.factor(gsub("g__", "", x)))
+merge_Bjer$taxa <- paste(merge_Bjer$Genus, merge_Bjer$Species, sep="; ")
+Bjer_var_taxa <- merge_Bjer[,c(11,2,3,4)]
+Bjer_var_taxa$coefficients <- as.numeric(as.character(Bjer_var_taxa$coefficients))
+Bjer_var_taxa$se <- as.numeric(as.character(Bjer_var_taxa$se))
+Bjer_var_taxa$p_value <- as.numeric(as.character(Bjer_var_taxa$p_value))
+```
+
+#PLS for Aalborg W (species level)
+```{r}
+asvtable <- amp_import_usearch(otutab = "ASVtable_Aalborg_W.tsv", sintax = "ASVs.R1.Aalborg_W.midas37.sintax")
+Meta <- openxlsx::read.xlsx("metadata_Aalborg_W.xlsx", detectDates = TRUE)
+ASV <- read.delim(file = "ASVtable_Aalborg_W.tsv", sep = "\t", row.names = 1, check.names = F)
+ASV = as.data.frame(ASV)
+ASV <- ASV[,match(Meta$Sample, colnames(ASV)), drop = FALSE]
+ASV = as.matrix(ASV)
+Taxa = asvtable[, 109:115]
+rownames(Taxa) = rownames(ASV)
+
+# normalize ASV values
+ASV = t(scale(ASV, center = F, scale = colSums(ASV)))
+
+# subset ASV variables
+ind = apply(ASV, 2, median) > 0.0005
+
+ASV = ASV[, ind]
+Taxa = Taxa[ind, ]
+dim(ASV)
+
+# remove ASVs with unknown Species
+ind = !(is.na(Taxa$Species))
+ASV = ASV[, ind]
+Taxa = Taxa[ind, ]
+
+# combine ASVs to Species
+uSpecies = unique(Taxa$Species[ind])
+uSpecies = uSpecies[-145]
+Species = matrix(0, nrow = nrow(ASV), ncol = length(uSpecies))
+for (i in 1:length(uSpecies)) {
+  Species[, i] = rowSums(ASV[, Taxa$Species == uSpecies[i], drop = F])
+}
+colnames(Species) = uSpecies
+rownames(Species) = rownames(ASV)
+
+
+# reorder ASV and meta data so they match each other
+indMeta = order(rownames(Meta))
+Meta = Meta[indMeta, ]
+indSpecies = order(rownames(Species))
+Species = Species[indSpecies, ]
+
+
+# reorder Species according to the abundance
+ind = order(apply(Species, 2, mean))
+Species = Species[, ind]
+Taxa = Taxa[ind, ]
+
+meanAbu = apply(Species, 2, mean)
+
+
+origDSVI = Meta$DSVI
+logDSVI = log(Meta$DSVI)
+multiDSVI = (Meta$DSVI)^0.8
+
+#distribution of DSVI, choose multiDSVI for PLS
+attach(Meta)
+par(mfrow = c(2, 2))
+hist(origDSVI, 10, col = 'blue', main = 'Original')
+hist(logDSVI, 10, col = 'blue', main = 'Preprocessed')
+hist(multiDSVI, 10, col = 'blue', main = 'Preprocessed')
+detach(Meta)
+
+#Set the PLS model
+m = pls(Species, multiDSVI, 10, scale = T, cv = list("ven", 8))
+m = selectCompNum(m, 2)
+summary(m)
+par(mfrow = c(3, 2))
+plotRMSE(m, type = 'b', show.labels = T)
+plotPredictions(m, show.labels = F, show.legend = F)
+plotXResiduals(m, show.labels = T, show.legend = F)#notice there is an outlier
+plotVIPScores(m,show.labels = T)
+plotSelectivityRatio(m,show.labels = T)
+par(mfrow = c(1, 1))
+
+#remove the outlier from the dataset
+outliers = which(rownames(Species) %in% c('16SAMP-3045'))
+Species = Species[-outliers, ]
+Meta = Meta[-outliers, ]
+multiDSVI = (Meta$DSVI)^0.8
+
+#do PLS again
+m = pls(Species, multiDSVI, 10, scale = T, cv = list("ven", 8))
+m = selectCompNum(m, 2)
+summary(m)
+par(mfrow = c(3, 2))
+plotRMSE(m, type = 'b', show.labels = T)
+plotPredictions(m, show.labels = F, show.legend = F)
+plotXResiduals(m, show.labels = T, show.legend = F)
+plotVIPScores(m,show.labels = T)
+plotSelectivityRatio(m,show.labels = T)
+par(mfrow = c(1, 1))
+
+
+#try to select the variable use vip and sr
+vip = vipscores(m,ncomp = 2)
+m2 = pls(Species, multiDSVI, 10, scale = T, cv = list("ven", 8), exclcols = (vip < 1))
+summary(m2)
+
+sr = selratio(m,ncomp = 2)
+m3 = pls(Species, multiDSVI, 10, scale = T, cv = list("ven", 8), exclcols = (sr < 0.2))
+summary(m3)
+
+#It seems that using the vip to select the variables is better
+
+plotRegcoeffs(m2, type = "h", show.ci = TRUE, show.labels = TRUE)
+
+#remove variables that p-valuse above 0.15
+exclcols = m2$coeffs$p.values[,2,1] > 0.15
+m4 = pls(Species, multiDSVI, 10, scale = T, cv = list("ven", 8), exclcols = exclcols)
+summary(m4)
+
+layout(matrix(c(1, 1, 2, 3), nrow = 2, byrow = T))
+plotRegcoeffs(m4, type = 'h', show.ci = T, show.labels = T, xlab = 'Species')
+plotRMSE(m4, type = 'b', show.labels = T)
+plotPredictions(m4$res$cv, xlab ='DSVI^0.8, reference', show.stat = T, col = "red3", ylab = 'DSVI^0.8, reference')
+
+summary(m4$coeffs, ncomp = 1)
+
+
+#extract the data for plots
+#extract the coef
+AAV_coef <- as.data.frame(m4$coeffs$values)
+AAV_coef <- AAV_coef[,1,F]
+colnames(AAV_coef)[1] <- "coefficients"
+#extract the se
+AAV_se <- as.data.frame(m4$coeffs$se)
+AAV_se <- AAV_se[,1,F]
+colnames(AAV_se)[1] <- "se"
+#extract the p_value
+AAV_p <- as.data.frame(m4$coeffs$p.values)
+AAV_p <- AAV_p[,1,F]
+colnames(AAV_p)[1] <- "p_value"
+#merge
+AAV_pls_var <- cbind(AAV_coef, AAV_se, AAV_p)
+AAV_pls_var <- subset(AAV_pls_var, p_value < 0.05)
+AAV_pls_var <- tibble::rownames_to_column(AAV_pls_var, "Species")
+
+
+merge <- merge.data.frame(AAV_pls_var, Taxa, by = "Species", all.x = TRUE) #Taxa should be the original file
+merge_AAV <- unique(merge)
+
+merge_AAV[] <- lapply(merge_AAV, function(x) as.factor(gsub("s__", "", x)))
+merge_AAV[] <- lapply(merge_AAV, function(x) as.factor(gsub("g__", "", x)))
+merge_AAV$taxa <- paste(merge_AAV$Genus, merge_AAV$Species, sep="; ")
+AAV_var_taxa <- merge_AAV[,c(11,2,3,4)]
+AAV_var_taxa$coefficients <- as.numeric(as.character(AAV_var_taxa$coefficients))
+AAV_var_taxa$se <- as.numeric(as.character(AAV_var_taxa$se))
+AAV_var_taxa$p_value <- as.numeric(as.character(AAV_var_taxa$p_value))
+
+```
+
+
+#Plot Figure 6
+```{r}
+AAV_plot <- ggplot(AAV_var_taxa, aes(x = reorder(taxa, coefficients), y = coefficients)) + 
+  geom_bar(stat = "identity", width=0.5, fill = "grey") +
+  geom_errorbar(aes(ymin=coefficients-se, ymax=coefficients+se), width=.2, color = "grey60",
+                 position=position_dodge(.9)) +
+  coord_flip() +
+    theme_bw() +
+  xlab("") +
+  annotate("text", 4, 0.06, label = "nLV = 2\nRMSE = 9.57\nR2 = 0.61",  vjust=1, hjust = 1, size = 5) + 
+  theme(axis.text.x = element_text(size = 14),  
+        axis.text.y = element_text(size = 14),
+        axis.title.x = element_text(size = 14))
+
+Bjer_plot <- ggplot(Bjer_var_taxa, aes(x = reorder(taxa, coefficients), y = coefficients)) + 
+  geom_bar(stat = "identity", width=0.5, fill = "grey") +
+  geom_errorbar(aes(ymin=coefficients-se, ymax=coefficients+se), width=.2, color = "grey60",
+                 position=position_dodge(.9)) +
+  coord_flip() +
+    theme_bw() +
+  xlab("") +
+  annotate("text", 4, 0.11, label = "nLV = 2\nRMSE = 5.35\nR2 = 0.75",  vjust=1, hjust = 1, size = 5)+ 
+  theme(axis.text.x = element_text(size = 14),  
+        axis.text.y = element_text(size = 14),
+        axis.title.x = element_text(size = 14))
+
+library(cowplot)
+plot_grid(AAV_plot, Bjer_plot, align='v',ncol = 1, labels=c('a', 'b'),   label_fontfamily = "serif",
+  label_fontface = "plain", label_size = 20, rel_heights = c(3,2))
+
+ggsave(filename = "AAV_Bjer_PLS_species_300dpi.jpg", width = 8.5, height = 16, dpi = 300)
+```
